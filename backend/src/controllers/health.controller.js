@@ -1,0 +1,13 @@
+
+export const getHealth = (req, res) => {
+    return res.status(200).json({
+        success: true,
+        message: 'MISE backend is running',
+        data: {
+            status: 'healthy',
+            environment: process.env.NODE_ENV || 'development',
+            uptime: Math.floor(process.uptime()),
+            timestamp: new Date().toISOString()
+        }
+    });
+};
