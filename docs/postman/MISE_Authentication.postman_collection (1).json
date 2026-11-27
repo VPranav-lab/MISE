@@ -1,0 +1,1641 @@
+{
+  "info": {
+    "name": "MISE - Authentication API",
+    "description": "Manual integration tests for MISE backend. Start MySQL, Redis and Express. Set a new email address you control in the collection Variables tab. Keep values local and do not share actual tokens or emails. Send numbered requests in sequence, entering the two actual OTPs manually. Run steps 19 and 20 within the access token lifetime (15 minutes by default); a TOKEN_EXPIRED response instead of INVALID_SESSION does not demonstrate revocation. Optional resend is run before verification only. Tests create a persistent account, workspace and sessions. Do not run against production. Rate limiting can affect repeated runs. No live credentials included.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:5000",
+      "type": "string"
+    },
+    {
+      "key": "email",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "username",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "password",
+      "value": "MiseTestPassword123!",
+      "type": "string"
+    },
+    {
+      "key": "newPassword",
+      "value": "NewMisePassword456!",
+      "type": "string"
+    },
+    {
+      "key": "emailOtp",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "resetOtp",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "accessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "refreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "oldRefreshToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "verificationAccessToken",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "resetToken",
+      "value": "",
+      "type": "string"
+    }
+  ],
+  "item": [
+    {
+      "name": "01 - Infrastructure and validation",
+      "description": "",
+      "item": [
+        {
+          "name": "01 - Liveness",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Healthy\", () => pm.expect(body.data.status).to.eql(\"healthy\"));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "02 - Readiness",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/health/ready",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health",
+                "ready"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Both services connected\", () => {",
+                  "        pm.expect(body.data.services.mysql).to.eql(\"connected\");",
+                  "        pm.expect(body.data.services.redis).to.eql(\"connected\");",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "03 - Missing access token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: AUTHENTICATION_REQUIRED\", () => pm.expect(body.error.code).to.eql(\"AUTHENTICATION_REQUIRED\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "04 - Invalid registration body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: VALIDATION_ERROR\", () => pm.expect(body.error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "05 - Invalid login body",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: VALIDATION_ERROR\", () => pm.expect(body.error.code).to.eql(\"VALIDATION_ERROR\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "02 - Registration and verification",
+      "description": "",
+      "item": [
+        {
+          "name": "06 - Register new account",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "Set email to an unused address you control before sending. Generates a fresh username and clears previous test credentials. Creates persistent test records.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"MISE\",\n  \"lastName\": \"Test\",\n  \"username\": \"{{username}}\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const email = pm.collectionVariables.get(\"email\");",
+                  "if (!email || !email.includes(\"@\")) throw new Error(\"Set a new deliverable email address in collection variables first\");",
+                  "for (const key of [\"accessToken\", \"refreshToken\", \"oldRefreshToken\", \"verificationAccessToken\", \"resetToken\", \"emailOtp\", \"resetOtp\", \"userId\"]) pm.collectionVariables.set(key, \"\");",
+                  "pm.collectionVariables.set(\"username\", \"mise_test_\" + Date.now());"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 201\", () => pm.response.to.have.status(201));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 201 && body.success === true) {",
+                  "    pm.test(\"Verification required\", () => pm.expect(body.data.verificationRequired).to.eql(true));",
+                  "    pm.collectionVariables.set(\"userId\", body.data.userId);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "07 - Duplicate username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/register",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "register"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"firstName\": \"MISE\",\n  \"lastName\": \"Test\",\n  \"username\": \"{{username}}\",\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\",\n  \"confirmPassword\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 409\", () => pm.response.to.have.status(409));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: USERNAME_ALREADY_EXISTS\", () => pm.expect(body.error.code).to.eql(\"USERNAME_ALREADY_EXISTS\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "08 - Unverified login",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 403\", () => pm.response.to.have.status(403));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: EMAIL_NOT_VERIFIED\", () => pm.expect(body.error.code).to.eql(\"EMAIL_NOT_VERIFIED\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "09 - Incorrect email OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Enter the actual email OTP in collection variables before this request. A different code is generated automatically.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{wrongOtp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "const code = pm.collectionVariables.get(\"emailOtp\");",
+                  "if (!/^\\d{6}$/.test(code || \"\")) throw new Error(\"Set emailOtp to the actual received six-digit OTP first\");",
+                  "pm.variables.set(\"wrongOtp\", (code[0] === \"0\" ? \"1\" : \"0\") + code.slice(1));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_OTP\", () => pm.expect(body.error.code).to.eql(\"INVALID_OTP\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "10 - Verify email",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-email",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-email"
+              ]
+            },
+            "description": "Manually enter the real six-digit emailOtp before sending. Creates the first authenticated session.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{emailOtp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Session tokens and workspace returned\", () => {",
+                  "        pm.expect(body.data.session.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(body.data.session.refreshToken).to.match(/^[a-f0-9]{64}$/);",
+                  "        pm.expect(body.data.workspace.mode).to.eql(\"PERSONAL\");",
+                  "        pm.expect(body.data.user.emailVerified).to.eql(true);",
+                  "    });",
+                  "    if (body.data.session.accessToken && /^[a-f0-9]{64}$/.test(body.data.session.refreshToken)) {",
+                  "        pm.collectionVariables.set(\"accessToken\", body.data.session.accessToken);",
+                  "        pm.collectionVariables.set(\"refreshToken\", body.data.session.refreshToken);",
+                  "        pm.collectionVariables.set(\"userId\", body.data.user.id);",
+                  "    }",
+                  "    pm.test(\"Onboarding next\", () => pm.expect(body.data.nextScreen).to.eql(\"ONBOARDING\"));",
+                  "    pm.collectionVariables.set(\"verificationAccessToken\", body.data.session.accessToken);",
+                  "    pm.collectionVariables.set(\"emailOtp\", \"\");",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "03 - Login and refresh",
+      "description": "",
+      "item": [
+        {
+          "name": "11 - Login with username",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Session tokens and workspace returned\", () => {",
+                  "        pm.expect(body.data.session.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(body.data.session.refreshToken).to.match(/^[a-f0-9]{64}$/);",
+                  "        pm.expect(body.data.workspace.mode).to.eql(\"PERSONAL\");",
+                  "        pm.expect(body.data.user.emailVerified).to.eql(true);",
+                  "    });",
+                  "    if (body.data.session.accessToken && /^[a-f0-9]{64}$/.test(body.data.session.refreshToken)) {",
+                  "        pm.collectionVariables.set(\"accessToken\", body.data.session.accessToken);",
+                  "        pm.collectionVariables.set(\"refreshToken\", body.data.session.refreshToken);",
+                  "        pm.collectionVariables.set(\"userId\", body.data.user.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "12 - Get current account",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Correct user and workspace\", () => {",
+                  "        pm.expect(String(body.data.user.id)).to.eql(String(pm.collectionVariables.get(\"userId\")));",
+                  "        pm.expect(body.data.workspace.mode).to.eql(\"PERSONAL\");",
+                  "        pm.expect(body.data.user).not.to.have.property(\"passwordHash\");",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "13 - Rotate refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    const previous = pm.collectionVariables.get(\"refreshToken\");",
+                  "    pm.test(\"Refresh token rotated\", () => pm.expect(body.data.session.refreshToken).not.to.eql(previous));",
+                  "    pm.collectionVariables.set(\"oldRefreshToken\", previous);",
+                  "    pm.test(\"Session tokens and workspace returned\", () => {",
+                  "        pm.expect(body.data.session.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(body.data.session.refreshToken).to.match(/^[a-f0-9]{64}$/);",
+                  "        pm.expect(body.data.workspace.mode).to.eql(\"PERSONAL\");",
+                  "        pm.expect(body.data.user.emailVerified).to.eql(true);",
+                  "    });",
+                  "    if (body.data.session.accessToken && /^[a-f0-9]{64}$/.test(body.data.session.refreshToken)) {",
+                  "        pm.collectionVariables.set(\"accessToken\", body.data.session.accessToken);",
+                  "        pm.collectionVariables.set(\"refreshToken\", body.data.session.refreshToken);",
+                  "        pm.collectionVariables.set(\"userId\", body.data.user.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "14 - Reject old refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{oldRefreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_REFRESH_TOKEN\", () => pm.expect(body.error.code).to.eql(\"INVALID_REFRESH_TOKEN\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "04 - Password recovery and session revocation",
+      "description": "",
+      "item": [
+        {
+          "name": "15 - Forgot password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/forgot-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "forgot-password"
+              ]
+            },
+            "description": "Check inbox for the password reset OTP; generic success does not prove delivery.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"OTP timing returned\", () => {",
+                  "        pm.expect(body.data.expiresInSeconds).to.be.above(0);",
+                  "        pm.expect(body.data.resendAfterSeconds).to.be.above(0);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "16 - Verify password reset OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/verify-reset-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "verify-reset-otp"
+              ]
+            },
+            "description": "Enter the received six-digit resetOtp before sending.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"code\": \"{{resetOtp}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Reset token returned\", () => pm.expect(body.data.resetToken).to.match(/^[a-f0-9]{64}$/));",
+                  "    pm.collectionVariables.set(\"resetToken\", body.data.resetToken);",
+                  "    pm.collectionVariables.set(\"resetOtp\", \"\");",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "17 - Reset password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"resetToken\": \"{{resetToken}}\",\n  \"password\": \"{{newPassword}}\",\n  \"confirmPassword\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Password reset confirmed\", () => pm.expect(body.data.passwordReset).to.eql(true));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "18 - Reject reused reset token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/reset-password",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "reset-password"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"resetToken\": \"{{resetToken}}\",\n  \"password\": \"{{newPassword}}\",\n  \"confirmPassword\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 400\", () => pm.response.to.have.status(400));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: RESET_TOKEN_EXPIRED\", () => pm.expect(body.error.code).to.eql(\"RESET_TOKEN_EXPIRED\"));",
+                  "if (pm.response.code === 400 && body.success === false) {",
+                  "    pm.collectionVariables.set(\"resetToken\", \"\");",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "19 - Reject pre-reset access token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_SESSION\", () => pm.expect(body.error.code).to.eql(\"INVALID_SESSION\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "20 - Reject verification session",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{verificationAccessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_SESSION\", () => pm.expect(body.error.code).to.eql(\"INVALID_SESSION\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "21 - Reject pre-reset refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_REFRESH_TOKEN\", () => pm.expect(body.error.code).to.eql(\"INVALID_REFRESH_TOKEN\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "22 - Reject old password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{username}}\",\n  \"password\": \"{{password}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_CREDENTIALS\", () => pm.expect(body.error.code).to.eql(\"INVALID_CREDENTIALS\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "23 - Login with email and new password",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/login",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "login"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"identifier\": \"{{email}}\",\n  \"password\": \"{{newPassword}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Session tokens and workspace returned\", () => {",
+                  "        pm.expect(body.data.session.accessToken).to.be.a(\"string\").and.not.empty;",
+                  "        pm.expect(body.data.session.refreshToken).to.match(/^[a-f0-9]{64}$/);",
+                  "        pm.expect(body.data.workspace.mode).to.eql(\"PERSONAL\");",
+                  "        pm.expect(body.data.user.emailVerified).to.eql(true);",
+                  "    });",
+                  "    if (body.data.session.accessToken && /^[a-f0-9]{64}$/.test(body.data.session.refreshToken)) {",
+                  "        pm.collectionVariables.set(\"accessToken\", body.data.session.accessToken);",
+                  "        pm.collectionVariables.set(\"refreshToken\", body.data.session.refreshToken);",
+                  "        pm.collectionVariables.set(\"userId\", body.data.user.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "05 - Logout",
+      "description": "",
+      "item": [
+        {
+          "name": "24 - Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Logout confirmed\", () => pm.expect(body.data.loggedOut).to.eql(true));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "25 - Reject revoked access token",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "me"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_SESSION\", () => pm.expect(body.error.code).to.eql(\"INVALID_SESSION\"));"
+                ]
+              }
+            }
+          ],
+          "response": []
+        },
+        {
+          "name": "26 - Reject revoked refresh token",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/refresh",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "refresh"
+              ]
+            },
+            "description": "",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 401\", () => pm.response.to.have.status(401));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(false));",
+                  "pm.test(\"Error code: INVALID_REFRESH_TOKEN\", () => pm.expect(body.error.code).to.eql(\"INVALID_REFRESH_TOKEN\"));",
+                  "if (pm.response.code === 401 && body.success === false) {",
+                  "    for (const key of [\"accessToken\", \"refreshToken\", \"oldRefreshToken\", \"verificationAccessToken\", \"resetToken\", \"emailOtp\", \"resetOtp\"]) pm.collectionVariables.set(key, \"\");",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "06 - Optional resend OTP (before verification only)",
+      "description": "Optional manual branch; not part of the main numbered sequence.",
+      "item": [
+        {
+          "name": "Optional - Resend registration OTP",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Accept",
+                "value": "application/json"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/resend-otp",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "resend-otp"
+              ]
+            },
+            "description": "Run after step 08 and before step 09, waiting at least 60 seconds after registration. Use the newest email OTP in step 09. Generic HTTP 200 does not guarantee delivery; check inbox. Do not run after verification.",
+            "auth": {
+              "type": "noauth"
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test(\"HTTP 200\", () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test(\"Response success flag\", () => pm.expect(body.success).to.eql(true));",
+                  "if (pm.response.code === 200 && body.success === true) {",
+                  "    pm.test(\"Resend timing returned\", () => pm.expect(body.data.resendAfterSeconds).to.be.above(0));",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "response": []
+        }
+      ]
+    }
+  ]
+}
